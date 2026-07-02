@@ -1,0 +1,7 @@
+Flask
+Flask-Login
+Flask-SQLAlchemy
+google-genai
+reportlab
+werkzeug
+gunicorn
