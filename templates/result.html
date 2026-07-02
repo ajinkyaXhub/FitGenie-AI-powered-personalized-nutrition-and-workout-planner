@@ -34,12 +34,20 @@
             <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px;">Maintenance: {{ calories }} kcal</p>
             
             <div style="margin-top: 15px; width: 100%;">
-                <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-dim); margin-bottom: 4px;">
-                    <span>Goal Progress</span>
-                    <span>Target Reached</span>
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px;">
+                    <span>Caloric Adjustment</span>
+                    <span style="font-weight: 600; color: var(--white);">
+                        {% if target_calories > calories %}
+                            +{{ target_calories - calories }} kcal Surplus
+                        {% elif target_calories < calories %}
+                            -{{ calories - target_calories }} kcal Deficit
+                        {% else %}
+                            Maintenance Match
+                        {% endif %}
+                    </span>
                 </div>
-                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 10px;">
-                    <div style="width: 100%; height: 100%; background: var(--secondary); border-radius: 10px;"></div>
+                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden;">
+                    <div style="width: 100%; height: 100%; background: linear-gradient(90deg, var(--secondary), var(--accent)); border-radius: 10px;"></div>
                 </div>
             </div>
         </div>
