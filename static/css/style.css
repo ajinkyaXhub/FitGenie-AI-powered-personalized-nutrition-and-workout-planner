@@ -322,6 +322,11 @@ nav .links a.active {
     outline: none;
 }
 
+.form-group select option {
+    background: var(--surface);
+    color: var(--text);
+}
+
 .form-group input:focus, .form-group select:focus {
     background: rgba(255,255,255,0.05);
     border-color: var(--primary-light);
