@@ -120,27 +120,29 @@ def calculate_calories(age, gender, height, weight, activity):
         bmr = 10 * w + 6.25 * h - 5 * a + 5
     else:
         bmr = 10 * w + 6.25 * h - 5 * a - 161
-    multipliers = {
-        "sedentary": 1.2, "light": 1.375, "moderate": 1.55,
-        "active": 1.725, "very active": 1.9
-    }
-    return round(bmr * multipliers.get(str(activity).lower(), 1.2))
+    act = str(activity).lower()
+    if "extra" in act or "elite" in act: mult = 1.9
+    elif "very" in act: mult = 1.725
+    elif "moderate" in act: mult = 1.55
+    elif "light" in act: mult = 1.375
+    else: mult = 1.2
+    return round(bmr * mult)
 
 
 def target_calories(maintenance, goal):
     g = str(goal).lower()
-    if g == "lose":   return maintenance - 500
-    elif g == "gain": return maintenance + 400
+    if "lose" in g:   return maintenance - 500
+    elif "gain" in g: return maintenance + 400
     return maintenance
 
 
 def macro_split(calories, goal):
     g = str(goal).lower()
-    if g == "lose":
+    if "lose" in g:
         p = round(calories * 0.35 / 4)
         f = round(calories * 0.30 / 9)
         c = round(calories * 0.35 / 4)
-    elif g == "gain":
+    elif "gain" in g:
         p = round(calories * 0.30 / 4)
         f = round(calories * 0.25 / 9)
         c = round(calories * 0.45 / 4)
@@ -153,9 +155,9 @@ def macro_split(calories, goal):
 
 def fitness_level(activity):
     a = str(activity).lower()
-    if a in ("sedentary", "light"):   return "beginner"
-    elif a == "moderate":             return "intermediate"
-    else:                             return "advanced"
+    if "sedentary" in a or "light" in a: return "beginner"
+    elif "moderate" in a:                return "intermediate"
+    else:                                return "advanced"
 
 
 def parse_plan(text):
@@ -308,29 +310,59 @@ NO introduction, conclusion, or extra text. Start directly with "Breakfast:".
     except Exception as e:
         print(f"[AI] ERROR in generate_meal_plan: {e}")
 
+    is_veg = "veg" in str(diet).lower()
+
     if bmi_cat in ("Obese", "Overweight"):
-        return {
-            "Breakfast": f"- Oats (60g dry) with water and berries (100g) | ~{bkf} kcal target\n- Green tea (no sugar)",
-            "Lunch": f"- Grilled chicken breast (150g) with 1/2 cup brown rice and salad | ~{lch} kcal target",
-            "Dinner": f"- Steamed fish (130g) with roasted vegetables (200g), no oil | ~{din} kcal target",
-            "Snacks": f"- Apple (1 medium) + 10 almonds | ~{snk} kcal target",
-            "Tips": f"- Target {tgt} kcal daily (your maintenance is {maint} kcal)\n- Choose high-fibre foods to stay full on fewer calories"
-        }
+        if is_veg:
+            return {
+                "Breakfast": f"- Oats (60g dry) with water and berries (100g) | ~{bkf} kcal target\n- Green tea (no sugar)",
+                "Lunch": f"- Tofu (150g) scramble with 1/2 cup quinoa and salad | ~{lch} kcal target",
+                "Dinner": f"- Lentil soup (200g) with roasted vegetables (200g), no oil | ~{din} kcal target",
+                "Snacks": f"- Apple (1 medium) + 10 almonds | ~{snk} kcal target",
+                "Tips": f"- Target {tgt} kcal daily (your maintenance is {maint} kcal)\n- Choose high-fibre foods to stay full on fewer calories"
+            }
+        else:
+            return {
+                "Breakfast": f"- Oats (60g dry) with water and berries (100g) | ~{bkf} kcal target\n- Green tea (no sugar)",
+                "Lunch": f"- Grilled chicken breast (150g) with 1/2 cup brown rice and salad | ~{lch} kcal target",
+                "Dinner": f"- Steamed fish (130g) with roasted vegetables (200g), no oil | ~{din} kcal target",
+                "Snacks": f"- Apple (1 medium) + 10 almonds | ~{snk} kcal target",
+                "Tips": f"- Target {tgt} kcal daily (your maintenance is {maint} kcal)\n- Choose high-fibre foods to stay full on fewer calories"
+            }
     elif bmi_cat == "Underweight":
+        if is_veg:
+            return {
+                "Breakfast": f"- Peanut butter (2 tbsp) on whole-grain toast (2 slices) + banana | ~{bkf} kcal target",
+                "Lunch": f"- Brown rice (150g cooked) + chickpea curry (200g) + avocado (1/2) | ~{lch} kcal target",
+                "Dinner": f"- Paneer/Tofu (180g) with sweet potato (150g) and olive oil | ~{din} kcal target",
+                "Snacks": f"- Handful of mixed nuts (40g) + soy/dairy milk (300ml) | ~{snk} kcal target",
+                "Tips": f"- Eat {tgt} kcal daily to gain weight steadily\n- Add healthy fats (nuts, seeds, avocado) to boost calories"
+            }
+        else:
+            return {
+                "Breakfast": f"- Peanut butter (2 tbsp) on whole-grain toast (2 slices) + banana | ~{bkf} kcal target",
+                "Lunch": f"- Brown rice (150g cooked) + lentil curry (200g) + avocado (1/2) | ~{lch} kcal target",
+                "Dinner": f"- Chicken thigh (180g) with sweet potato (150g) and olive oil | ~{din} kcal target",
+                "Snacks": f"- Handful of mixed nuts (40g) + full-fat milk (300ml) | ~{snk} kcal target",
+                "Tips": f"- Eat {tgt} kcal daily to gain weight steadily\n- Add healthy fats (nuts, seeds, avocado) to boost calories"
+            }
+    
+    if is_veg:
         return {
-            "Breakfast": f"- Peanut butter (2 tbsp) on whole-grain toast (2 slices) + banana | ~{bkf} kcal target",
-            "Lunch": f"- Brown rice (150g cooked) + lentil curry (200g) + avocado (1/2) | ~{lch} kcal target",
-            "Dinner": f"- Chicken thigh (180g) with sweet potato (150g) and olive oil | ~{din} kcal target",
-            "Snacks": f"- Handful of mixed nuts (40g) + full-fat milk (300ml) | ~{snk} kcal target",
-            "Tips": f"- Eat {tgt} kcal daily to gain weight steadily\n- Add healthy fats (nuts, seeds, avocado) to boost calories"
+            "Breakfast": f"- Tofu scramble (100g) with spinach (80g) and 1 slice whole-grain toast | ~{bkf} kcal target",
+            "Lunch": f"- Roasted chickpeas (100g) with quinoa (80g), cucumber, and tomatoes | ~{lch} kcal target",
+            "Dinner": f"- Tempeh/Paneer (120g) with asparagus (120g) and half sweet potato | ~{din} kcal target",
+            "Snacks": f"- Greek/Soy yogurt (150g) + 1 apple | ~{snk} kcal target",
+            "Tips": f"- Aim for {tgt} kcal/day to {goal} weight effectively\n- Spread meals 3-4 hours apart for stable energy"
         }
-    return {
-        "Breakfast": f"- Eggs (3 scrambled) with spinach (80g) and 1 slice whole-grain toast | ~{bkf} kcal target",
-        "Lunch": f"- Grilled chicken (150g) with quinoa (80g), cucumber, and tomatoes | ~{lch} kcal target",
-        "Dinner": f"- Baked salmon (140g) with asparagus (120g) and half sweet potato | ~{din} kcal target",
-        "Snacks": f"- Greek yogurt (150g) + 1 apple | ~{snk} kcal target",
-        "Tips": f"- Aim for {tgt} kcal/day to {goal} weight effectively\n- Spread meals 3-4 hours apart for stable energy"
-    }
+    else:
+        return {
+            "Breakfast": f"- Eggs (3 scrambled) with spinach (80g) and 1 slice whole-grain toast | ~{bkf} kcal target",
+            "Lunch": f"- Grilled chicken (150g) with quinoa (80g), cucumber, and tomatoes | ~{lch} kcal target",
+            "Dinner": f"- Baked salmon (140g) with asparagus (120g) and half sweet potato | ~{din} kcal target",
+            "Snacks": f"- Greek yogurt (150g) + 1 apple | ~{snk} kcal target",
+            "Tips": f"- Aim for {tgt} kcal/day to {goal} weight effectively\n- Spread meals 3-4 hours apart for stable energy"
+        }
 
 
 
@@ -380,28 +412,50 @@ Rules:
         return response.text.strip()
     except Exception as e:
         print(f"[AI] Replace meal error: {e}")
+        is_veg = "veg" in str(diet).lower()
         if meal_type == "Breakfast":
-            fallbacks = [
-                f"- Scrambled eggs (2) on wholewheat toast (1 slice) + 1/2 avocado | ~{cal_target} kcal",
-                f"- High-protein Greek yogurt (200g) + honey (1 tsp) + mixed berries (80g) | ~{cal_target} kcal",
-                f"- Protein smoothie (1 scoop whey, 200ml almond milk, 1/2 banana) | ~{cal_target} kcal"
-            ]
+            if is_veg:
+                fallbacks = [
+                    f"- Tofu scramble (100g) on wholewheat toast (1 slice) + 1/2 avocado | ~{cal_target} kcal",
+                    f"- High-protein soy yogurt (200g) + maple syrup (1 tsp) + mixed berries (80g) | ~{cal_target} kcal",
+                    f"- Vegan protein smoothie (1 scoop plant protein, 200ml almond milk, 1/2 banana) | ~{cal_target} kcal"
+                ]
+            else:
+                fallbacks = [
+                    f"- Scrambled eggs (2) on wholewheat toast (1 slice) + 1/2 avocado | ~{cal_target} kcal",
+                    f"- High-protein Greek yogurt (200g) + honey (1 tsp) + mixed berries (80g) | ~{cal_target} kcal",
+                    f"- Protein smoothie (1 scoop whey, 200ml almond milk, 1/2 banana) | ~{cal_target} kcal"
+                ]
         elif meal_type == "Lunch":
-            fallbacks = [
-                f"- Grilled turkey breast (150g) + quinoa (100g) + vinaigrette | ~{cal_target} kcal",
-                f"- Tuna salad sandwich (wholewheat bread, 1/2 can tuna, light mayo) | ~{cal_target} kcal",
-                f"- Baked tofu (150g) wrap with mixed greens and hummus | ~{cal_target} kcal"
-            ]
+            if is_veg:
+                fallbacks = [
+                    f"- Roasted chickpeas (150g) + quinoa (100g) + vinaigrette | ~{cal_target} kcal",
+                    f"- Smashed chickpea sandwich (wholewheat bread, 100g chickpeas, vegan mayo) | ~{cal_target} kcal",
+                    f"- Baked tofu (150g) wrap with mixed greens and hummus | ~{cal_target} kcal"
+                ]
+            else:
+                fallbacks = [
+                    f"- Grilled turkey breast (150g) + quinoa (100g) + vinaigrette | ~{cal_target} kcal",
+                    f"- Tuna salad sandwich (wholewheat bread, 1/2 can tuna, light mayo) | ~{cal_target} kcal",
+                    f"- Baked tofu (150g) wrap with mixed greens and hummus | ~{cal_target} kcal"
+                ]
         elif meal_type == "Dinner":
-            fallbacks = [
-                f"- Lean steak (150g) + asparagus (100g) + roasted potatoes (100g) | ~{cal_target} kcal",
-                f"- Chicken fajita bowl (150g chicken, bell peppers, 50g black beans) | ~{cal_target} kcal",
-                f"- Baked cod fillet (180g) with lemon, zucchini squash, and brown rice | ~{cal_target} kcal"
-            ]
+            if is_veg:
+                fallbacks = [
+                    f"- Lentil stew (200g) + asparagus (100g) + roasted potatoes (100g) | ~{cal_target} kcal",
+                    f"- Tofu fajita bowl (150g tofu, bell peppers, 50g black beans) | ~{cal_target} kcal",
+                    f"- Paneer curry (150g) with zucchini squash, and brown rice | ~{cal_target} kcal"
+                ]
+            else:
+                fallbacks = [
+                    f"- Lean steak (150g) + asparagus (100g) + roasted potatoes (100g) | ~{cal_target} kcal",
+                    f"- Chicken fajita bowl (150g chicken, bell peppers, 50g black beans) | ~{cal_target} kcal",
+                    f"- Baked cod fillet (180g) with lemon, zucchini squash, and brown rice | ~{cal_target} kcal"
+                ]
         else:
             fallbacks = [
                 f"- Rice cakes (2) with peanut butter (1 tbsp) | ~{cal_target} kcal",
-                f"- Handful of edamame (100g) + string cheese | ~{cal_target} kcal",
+                f"- Handful of edamame (100g) + string cheese/vegan cheese | ~{cal_target} kcal",
                 f"- Protein bar (low-sugar) + small apple | ~{cal_target} kcal"
             ]
         return fallbacks[(variation - 1) % len(fallbacks)]
