@@ -26,85 +26,146 @@ def detect_mime_type(image_bytes):
 
 def analyze_meal_image(image_bytes, goal):
     print(f"[AI] Analyzing meal image for goal: {goal}")
+    print(f"[AI] Image size: {len(image_bytes)} bytes")
 
     mime_type = detect_mime_type(image_bytes)
     print(f"[AI] Detected MIME type: {mime_type}")
 
-    prompt = f"""You are a precise computer-vision food analysis system. Your job is to analyze the uploaded photograph and report exactly what is visible. Be accurate and honest.
+    prompt = f"""Look at the uploaded food photo and analyze it carefully.
 
-CORE RULES:
-1. Only identify food items that are clearly visible in the photograph. Do not guess hidden ingredients.
-2. Report the food as it appears — if it's a burger, say "Burger"; if it's a fruit, say the fruit name. Do not wrap simple items in fake elaborate descriptions.
-3. If the image is blurry, too dark, or not food at all, set alignment_status to "Unclear" and describe what you see.
-4. Each item should include a confidence_score (0.0 to 1.0) based on your visual certainty. A clear, well-lit photo of a common food should score 0.85–0.98.
+Describe what you see. Identify the food items, estimate their portion sizes, and calculate approximate calories and macros.
 
-JSON OUTPUT (return ONLY this JSON, no markdown, no backticks, no extra text):
+IMPORTANT: Only describe what you can actually see in the photo. Do not guess about hidden ingredients.
+
+Respond in this exact format (JSON wrapped in ```json ... ``` code blocks):
+
+```json
 {{
-    "dish_name": "What the dish is, e.g., 'Cheeseburger' or 'Sliced Watermelon'",
-    "image_description": "One sentence describing what is literally in the photo",
+    "dish_name": "Name of the dish",
+    "image_description": "One sentence about what you see",
     "confidence": 0.95,
     "items": [
-        {{"name": "Item with estimated weight (e.g., Beef patty (150g))", "calories": 300, "protein": 20, "carbs": 0, "fats": 25, "confidence_score": 0.95}}
+        {{
+            "name": "Item name with weight (e.g., Beef patty, 150g)",
+            "calories": 300,
+            "protein": 20,
+            "carbs": 0,
+            "fats": 25,
+            "confidence_score": 0.95
+        }}
     ],
-    "total": {{"calories": 300, "protein": 20, "carbs": 0, "fats": 25}},
+    "total": {{
+        "calories": 300,
+        "protein": 20,
+        "carbs": 0,
+        "fats": 25
+    }},
     "alignment_status": "Good",
-    "tips": ["Tip 1...", "Tip 2..."]
+    "tips": ["Tip 1", "Tip 2"]
 }}
+```
 
-ALIGNMENT_STATUS:
-- "Good" = aligns with goal
-- "Moderate" = partially aligns
-- "Not Ideal" = works against goal
-- "Unclear" = only if the image is not food, blurry, or unrecognizable
+User fitness goal: {goal}
 
-USER FITNESS GOAL: "{goal}"
+Rules:
+- Be honest about what you see. If it's a pizza, say "Pizza".
+- If the image is not food or unrecognizable, use "alignment_status": "Unclear".
+- Otherwise, confidence should be 0.85-0.98 for clear photos.
 """
+
     try:
         from google.genai import types
         try:
             image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
-        except Exception:
-            image_part = {"mime_type": mime_type, "data": image_bytes}
+            print(f"[AI] Created Part object: {type(image_part)}")
+        except Exception as e:
+            print(f"[AI] types.Part.from_bytes failed: {e}")
+            # Fallback: try to create a Content object with image
+            try:
+                image_part = types.Part(inline_data=types.Blob(mime_type=mime_type, data=image_bytes))
+                print(f"[AI] Created Part via Blob fallback: {type(image_part)}")
+            except Exception as e2:
+                print(f"[AI] Blob fallback also failed: {e2}")
+                image_part = image_bytes
+                print(f"[AI] Using raw bytes as fallback: {type(image_part)}")
 
+        print(f"[AI] Sending {len(image_bytes)} bytes to model gemini-1.5-flash...")
+
+        # DO NOT use response_mime_type="application/json" — it breaks image analysis
         response = client.models.generate_content(
             model="gemini-1.5-flash",
-            contents=[prompt, image_part],
-            config={"response_mime_type": "application/json"}
+            contents=[prompt, image_part]
         )
 
-        raw = response.text.replace('```json', '').replace('```', '').strip()
-        data = json.loads(raw)
+        raw = response.text
+        print(f"[AI] Raw response length: {len(raw)} chars")
+        print(f"[AI] Raw response preview: {raw[:800]}")
 
-        # Validate: only flag extremely suspicious results (very low confidence + generic hallucination words)
-        confidence = data.get("confidence", 1.0)
+        # Extract JSON from the response
+        data = None
+        json_match = re.search(r'```json\s*(.*?)\s*```', raw, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group(1))
+                print(f"[AI] Parsed JSON from ```json block")
+            except json.JSONDecodeError as e:
+                print(f"[AI] JSON decode from block failed: {e}")
+        else:
+            # Try to find any JSON object in the text
+            json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+            if json_match:
+                try:
+                    data = json.loads(json_match.group())
+                    print(f"[AI] Parsed JSON from text match")
+                except json.JSONDecodeError as e:
+                    print(f"[AI] JSON decode from text failed: {e}")
+
+        if data is None:
+            print(f"[AI] Could not extract JSON from response. Raw: {raw[:500]}")
+            raise ValueError("Could not extract JSON from model response")
+
+        # Ensure required fields exist
+        if "dish_name" not in data:
+            data["dish_name"] = "Unknown"
+        if "confidence" not in data:
+            data["confidence"] = 0.5
+        if "items" not in data:
+            data["items"] = []
+        if "total" not in data:
+            data["total"] = {"calories": 0, "protein": 0, "carbs": 0, "fats": 0}
+        if "alignment_status" not in data:
+            data["alignment_status"] = "Unclear"
+        if "tips" not in data:
+            data["tips"] = ["No tips generated"]
+        if "image_description" not in data:
+            data["image_description"] = ""
+
+        # Ensure items have confidence_score
+        for item in data.get("items", []):
+            if "confidence_score" not in item:
+                item["confidence_score"] = 0.8
+
+        # Log what we got
+        confidence = data.get("confidence", 0.5)
         dish_name = data.get("dish_name", "")
-        image_desc = data.get("image_description", "")
+        item_count = len(data.get("items", []))
+        print(f"[AI] Parsed: dish='{dish_name}', confidence={confidence}, items={item_count}, status={data.get('alignment_status')}")
 
-        # Only flag if confidence is extremely low (< 0.3) AND dish name contains a known hallucination pattern
-        generic_hallucinations = ["chicken breast", "grilled chicken", "white rice", "toast", "steak"]
-        has_hallucination = any(h in dish_name.lower() for h in generic_hallucinations)
-        if confidence < 0.3 and has_hallucination:
-            print(f"[AI] WARNING: Very low confidence ({confidence}) with generic dish name '{dish_name}'. Flagging as unclear.")
-            data["alignment_status"] = "Unclear - Low confidence detection"
-            data["tips"] = [
-                "The AI could not confidently identify the food in this photo.",
-                "Please retake the photo with better lighting and closer framing."
-            ]
-
-        print(f"[AI] Analysis result: dish='{dish_name}', confidence={confidence}, status={data.get('alignment_status')}")
         return data
     except Exception as e:
         print(f"[AI] Image analysis error: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "dish_name": "Analysis Failed",
-            "image_description": "The AI service could not process this image. Please try again.",
+            "image_description": "The AI could not analyze this image. Please try again.",
             "confidence": 0.0,
             "items": [],
             "total": {"calories": 0, "protein": 0, "carbs": 0, "fats": 0},
             "alignment_status": "Unclear",
             "tips": [
-                "The image could not be analyzed. Please check your internet connection and API key.",
-                "Try uploading a clearer, well-lit photo of your food."
+                "The AI service encountered an error. Please try again.",
+                "If the problem persists, try a different image or check your API key."
             ]
         }
 

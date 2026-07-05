@@ -149,21 +149,27 @@ def generate_workout():
 @login_required
 def analyze_meal():
     if 'file' not in request.files:
+        print("[API] No file in request.files")
         return jsonify({"error": "No file uploaded"}), 400
         
     file = request.files['file']
     if file.filename == '':
+        print("[API] Empty filename")
         return jsonify({"error": "No file selected"}), 400
-        
+    
     try:
         image_bytes = file.read()
+        print(f"[API] Received file: {file.filename}, size: {len(image_bytes)} bytes, mimetype: {file.mimetype}")
         from utils.ai import analyze_meal_image
         goal = current_user.goal or "Maintain Fitness"
         
         result = analyze_meal_image(image_bytes, goal)
+        print(f"[API] Analysis result: {result.get('dish_name', 'N/A')}, confidence: {result.get('confidence', 'N/A')}, status: {result.get('alignment_status', 'N/A')}")
         return jsonify(result)
     except Exception as e:
         print(f"[API] Error analyzing meal: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

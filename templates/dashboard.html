@@ -126,12 +126,12 @@
                         </div>
                     </div>
 
-                    <div id="meal-unclear-warning" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+                    <div id="meal-unclear-warning" style="display: none; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <i class="fas fa-triangle-exclamation" style="color: #ef4444;"></i>
-                            <span style="font-weight: 700; color: #ef4444; font-size: 0.9rem;">Low Confidence Detection</span>
+                            <i class="fas fa-triangle-exclamation" style="color: #f59e0b;"></i>
+                            <span style="font-weight: 700; color: #f59e0b; font-size: 0.9rem;">Could Not Identify Food</span>
                         </div>
-                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">The AI could not confidently identify the food in this image. Please try uploading a clearer, well-lit photo with the food centered and in focus.</p>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">The AI could not clearly see food in this image. Please try uploading a photo of the food itself with better lighting and closer framing.</p>
                     </div>
 
                     <div style="margin-bottom: 1.5rem;">
@@ -269,7 +269,10 @@
                     // Unclear warning banner
                     const status = (data.alignment_status || "").toLowerCase();
                     const unclearWarning = document.getElementById('meal-unclear-warning');
-                    if (status.includes("unclear") && (data.confidence === undefined || data.confidence < 0.35)) {
+                    // Only show warning for genuine failures: no items OR confidence 0 OR analysis failed
+                    const hasNoItems = !data.items || data.items.length === 0;
+                    const isGenuineFailure = status.includes("unclear") && (data.confidence === 0 || data.confidence === undefined || hasNoItems);
+                    if (isGenuineFailure) {
                         unclearWarning.style.display = 'block';
                     } else {
                         unclearWarning.style.display = 'none';
@@ -321,7 +324,7 @@
                     } else if (status.includes("unclear")) {
                         badgeClass = "muscle-secondary";
                         badgeIcon = "fa-triangle-exclamation";
-                        badgeContainer.innerHTML = `<span class="muscle-badge" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);"><i class="fas ${badgeIcon}"></i> ${data.alignment_status || "Unclear"}</span>`;
+                        badgeContainer.innerHTML = `<span class="muscle-badge" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2);"><i class="fas ${badgeIcon}"></i> ${data.alignment_status || "Unclear"}</span>`;
                         badgeContainer.dataset.rendered = "true";
                     }
 
