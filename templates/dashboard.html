@@ -116,11 +116,22 @@
                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
                         <div>
                             <h3 style="font-size: 1.1rem; margin-bottom: 5px;" id="meal-dish-name">Analysis Complete</h3>
-                            <p style="color: var(--text-muted); font-size: 0.85rem;">Estimated macro breakdown per ingredient.</p>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 5px;" id="meal-image-desc">Estimated macro breakdown per ingredient.</p>
+                            <div id="meal-confidence-container" style="display: none; margin-top: 5px; font-size: 0.75rem; color: var(--text-dim);">
+                                <i class="fas fa-eye"></i> AI Confidence: <span id="meal-confidence" style="font-weight: 700;">-</span>
+                            </div>
                         </div>
                         <div id="meal-badge-container">
                             <!-- Badge injected via JS -->
                         </div>
+                    </div>
+
+                    <div id="meal-unclear-warning" style="display: none; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <i class="fas fa-triangle-exclamation" style="color: #ef4444;"></i>
+                            <span style="font-weight: 700; color: #ef4444; font-size: 0.9rem;">Low Confidence Detection</span>
+                        </div>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">The AI could not confidently identify the food in this image. Please try uploading a clearer, well-lit photo with the food centered and in focus.</p>
                     </div>
 
                     <div style="margin-bottom: 1.5rem;">
@@ -241,14 +252,40 @@
                     
                     // Populate UI
                     document.getElementById('meal-dish-name').innerText = data.dish_name || "Analyzed Meal";
+                    document.getElementById('meal-image-desc').innerText = data.image_description || "Estimated macro breakdown per ingredient.";
+                    
+                    // Confidence display
+                    const confidenceContainer = document.getElementById('meal-confidence-container');
+                    const confidenceVal = document.getElementById('meal-confidence');
+                    if (data.confidence !== undefined && data.confidence !== null) {
+                        confidenceContainer.style.display = 'block';
+                        const pct = Math.round((data.confidence || 0) * 100);
+                        confidenceVal.innerText = pct + "%";
+                        confidenceVal.style.color = pct >= 80 ? '#34d399' : (pct >= 60 ? '#f59e0b' : '#ef4444');
+                    } else {
+                        confidenceContainer.style.display = 'none';
+                    }
+                    
+                    // Unclear warning banner
+                    const unclearWarning = document.getElementById('meal-unclear-warning');
+                    const status = (data.alignment_status || "").toLowerCase();
+                    if (status.includes("unclear") || (data.confidence !== undefined && data.confidence < 0.6)) {
+                        unclearWarning.style.display = 'block';
+                    } else {
+                        unclearWarning.style.display = 'none';
+                    }
                     
                     const ingredientsList = document.getElementById('meal-ingredients-list');
                     ingredientsList.innerHTML = '';
                     if (data.items && data.items.length > 0) {
                         data.items.forEach(item => {
+                            const itemConf = item.confidence_score !== undefined ? Math.round((item.confidence_score || 0) * 100) : null;
+                            const confBadge = itemConf !== null 
+                                ? `<span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 99px; background: ${itemConf >= 80 ? 'rgba(52,211,153,0.15)' : (itemConf >= 60 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)')}; color: ${itemConf >= 80 ? '#34d399' : (itemConf >= 60 ? '#f59e0b' : '#ef4444')}; border: 1px solid ${itemConf >= 80 ? 'rgba(52,211,153,0.3)' : (itemConf >= 60 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)')};">${itemConf}%</span>` 
+                                : '';
                             ingredientsList.innerHTML += `
-                                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
-                                    <span style="color: var(--white); font-weight: 600;">${item.name}</span>
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                                    <span style="color: var(--white); font-weight: 600;">${item.name} ${confBadge}</span>
                                     <span style="color: var(--text-muted);">${item.calories} kcal <span style="font-size: 0.75rem; color: var(--text-dim);">(P:${item.protein}g C:${item.carbs}g F:${item.fats}g)</span></span>
                                 </div>
                             `;
@@ -265,21 +302,26 @@
                     
                     // Badge Logic
                     const badgeContainer = document.getElementById('meal-badge-container');
-                    const status = (data.alignment_status || "").toLowerCase();
+                    badgeContainer.innerHTML = ''; // clear previous
+                    badgeContainer.dataset.rendered = "";
                     let badgeClass = "muscle-secondary"; 
                     let badgeIcon = "fa-circle-question";
                     
                     if (status.includes("good")) {
-                        badgeClass = "muscle-primary"; // Reusing existing classes for green tint
+                        badgeClass = "muscle-primary";
                         badgeIcon = "fa-check-circle";
                     } else if (status.includes("moderate")) {
                         badgeClass = "muscle-secondary"; 
                         badgeIcon = "fa-exclamation-circle";
                     } else if (status.includes("not ideal") || status.includes("poor")) {
-                        badgeClass = "muscle-secondary"; // We could use an error class if we had one
+                        badgeClass = "muscle-secondary";
                         badgeIcon = "fa-times-circle";
-                        // Override inline styles for red alert
                         badgeContainer.innerHTML = `<span class="muscle-badge" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);"><i class="fas ${badgeIcon}"></i> ${data.alignment_status}</span>`;
+                        badgeContainer.dataset.rendered = "true";
+                    } else if (status.includes("unclear")) {
+                        badgeClass = "muscle-secondary";
+                        badgeIcon = "fa-triangle-exclamation";
+                        badgeContainer.innerHTML = `<span class="muscle-badge" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2);"><i class="fas ${badgeIcon}"></i> ${data.alignment_status || "Unclear"}</span>`;
                         badgeContainer.dataset.rendered = "true";
                     }
 

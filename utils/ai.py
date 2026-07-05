@@ -11,95 +11,109 @@ def clean_response(text):
     return text.strip()
 
 
+def detect_mime_type(image_bytes):
+    """Detect image MIME type from file headers."""
+    if image_bytes[:2] == b'\xff\xd8':
+        return "image/jpeg"
+    if image_bytes[:8] == b'\x89PNG\r\n\x1a\n':
+        return "image/png"
+    if image_bytes[:4] == b'RIFF' and image_bytes[8:12] == b'WEBP':
+        return "image/webp"
+    if image_bytes[:4] in (b'GIF8', b'GIF9'):
+        return "image/gif"
+    return "image/jpeg"
+
+
 def analyze_meal_image(image_bytes, goal):
     print(f"[AI] Analyzing meal image for goal: {goal}")
-    
-    prompt = f"""
-    You are an expert sports nutritionist and AI vision model. Analyze the uploaded image of a meal.
-    1. Identify the name of the overall dish.
-    2. Identify the specific food items/ingredients and estimate their approximate portion sizes.
-    3. For each specific food item, estimate its calories and macros.
-    4. Calculate the total calories, protein (g), carbs (g), and fats (g) for the entire meal.
-    5. Compare this overall nutritional profile against the user's fitness goal: "{goal}".
-    6. Provide exactly 2 short, actionable improvement tips.
-    
-    Return exactly a JSON object (no markdown, no backticks, just raw JSON) with this exact structure:
-    {{
-        "dish_name": "Example Dish Name",
-        "items": [
-            {{"name": "Grilled Chicken (150g)", "calories": 250, "protein": 35, "carbs": 0, "fats": 5}},
-            {{"name": "White Rice (100g)", "calories": 130, "protein": 2, "carbs": 28, "fats": 0}}
-        ],
-        "total": {{"calories": 380, "protein": 37, "carbs": 28, "fats": 5}},
-        "alignment_status": "Good",
-        "tips": ["Tip 1...", "Tip 2..."]
-    }}
-    """
+
+    mime_type = detect_mime_type(image_bytes)
+    print(f"[AI] Detected MIME type: {mime_type}")
+
+    prompt = f"""You are a precise computer-vision food analysis system. Your ONLY job is to analyze the uploaded photograph and report EXACTLY what is visible. Hallucination is a critical failure.
+
+ABSOLUTE RULES — violation causes incorrect analysis:
+1. ONLY identify food items that are CLEARLY and UNAMBIGUOUSLY visible in the photograph. Do NOT guess, assume, or infer hidden ingredients.
+2. If you see a single piece of fruit (watermelon, apple, banana, orange, grapes, berries, etc.), report it as that fruit with an estimated weight. Do NOT wrap it in a fake meal description like "fruit salad" or "chicken toast."
+3. If you are uncertain about ANY item, do NOT include it. Instead, lower the overall confidence score.
+4. NEVER invent generic items like "chicken breast", "toast", "white rice", "salad", or "eggs" unless they are literally, clearly visible in the photo.
+5. If the image is not food, blurry, too dark, or shows a non-food object, you MUST set alignment_status to "Unclear" and describe what you actually see in image_description.
+6. Each item MUST include a confidence_score between 0.0 and 1.0 based on your visual certainty.
+
+VISUAL ANALYSIS WORKFLOW:
+Step 1 — Describe the image in one sentence: what is literally visible?
+Step 2 — List each distinct food item with estimated weight and confidence_score.
+Step 3 — If any item has confidence_score < 0.7, reconsider if it should be included.
+Step 4 — If total confidence < 0.6, set alignment_status to "Unclear".
+
+JSON OUTPUT SCHEMA (return ONLY this JSON, no markdown, no backticks, no extra text):
+{{
+    "dish_name": "EXACTLY what is visible, e.g., 'Sliced Watermelon' or 'Grilled Chicken Salad'",
+    "image_description": "One sentence describing what is literally in the photo",
+    "confidence": 0.95,
+    "items": [
+        {{"name": "Item name with estimated weight (e.g., Watermelon, sliced (300g))", "calories": 90, "protein": 2, "carbs": 22, "fats": 0, "confidence_score": 0.98}}
+    ],
+    "total": {{"calories": 90, "protein": 2, "carbs": 22, "fats": 0}},
+    "alignment_status": "Good",
+    "tips": ["Tip 1...", "Tip 2..."]
+}}
+
+ALIGNMENT_STATUS RULES:
+- "Good" = clearly aligns with the user's goal AND confidence >= 0.8
+- "Moderate" = partially aligns with goal OR confidence 0.6-0.8
+- "Not Ideal" = works against the goal
+- "Unclear" = confidence < 0.6, not food, blurry, or cannot identify items
+
+USER FITNESS GOAL: "{goal}"
+"""
     try:
         from google.genai import types
         try:
-            image_part = types.Part.from_bytes(data=image_bytes, mime_type='image/jpeg')
+            image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
         except Exception:
-            image_part = {"mime_type": "image/jpeg", "data": image_bytes}
-            
+            image_part = {"mime_type": mime_type, "data": image_bytes}
+
         response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=[prompt, image_part],
             config={"response_mime_type": "application/json"}
         )
-        
+
         raw = response.text.replace('```json', '').replace('```', '').strip()
         data = json.loads(raw)
+
+        # Validate: if confidence is too low or dish looks like a generic hallucination, flag it
+        confidence = data.get("confidence", 1.0)
+        dish_name = data.get("dish_name", "")
+        image_desc = data.get("image_description", "")
+
+        # Check for common hallucination patterns
+        generic_hallucinations = ["chicken breast", "grilled chicken", "white rice", "toast", "steak", "salad"]
+        if confidence < 0.5 or any(h in dish_name.lower() for h in generic_hallucinations) and confidence < 0.7:
+            print(f"[AI] WARNING: Low confidence or possible hallucination detected (confidence={confidence}, dish={dish_name}). Flagging as unclear.")
+            data["alignment_status"] = "Unclear - Low confidence or possible hallucination"
+            data["tips"] = [
+                "The AI could not confidently identify the food in this photo.",
+                "Please retake the photo with better lighting, closer framing, and ensure the food is clearly visible."
+            ]
+
+        print(f"[AI] Analysis result: dish='{dish_name}', confidence={confidence}, status={data.get('alignment_status')}")
         return data
     except Exception as e:
-        print(f"[AI] Image analysis error (using fallback): {e}")
-        import random
-        fallbacks = [
-            {
-                "dish_name": "(Fallback) Grilled Chicken & Roasted Veggies",
-                "items": [
-                    {"name": "Grilled Chicken Breast (150g)", "calories": 248, "protein": 46, "carbs": 0, "fats": 5},
-                    {"name": "Sweet Potato (100g)", "calories": 86, "protein": 2, "carbs": 20, "fats": 0},
-                    {"name": "Steamed Broccoli (80g)", "calories": 28, "protein": 3, "carbs": 6, "fats": 0},
-                    {"name": "Olive Oil Drizzle (1 tbsp)", "calories": 119, "protein": 0, "carbs": 0, "fats": 14}
-                ],
-                "total": {"calories": 481, "protein": 51, "carbs": 26, "fats": 19},
-                "alignment_status": "Moderate",
-                "tips": [
-                    f"Double-check your portion sizes align tightly with your {goal} objective.",
-                    "Ensure your protein source is lean (like grilled chicken or tofu) to keep saturated fats low."
-                ]
-            },
-            {
-                "dish_name": "(Fallback) Steak & Asparagus Dinner",
-                "items": [
-                    {"name": "Grilled Sirloin Steak (200g)", "calories": 414, "protein": 54, "carbs": 0, "fats": 20},
-                    {"name": "Roasted Asparagus (150g)", "calories": 40, "protein": 4, "carbs": 7, "fats": 0},
-                    {"name": "Mashed Potatoes (150g)", "calories": 160, "protein": 3, "carbs": 26, "fats": 5}
-                ],
-                "total": {"calories": 614, "protein": 61, "carbs": 33, "fats": 25},
-                "alignment_status": "Good",
-                "tips": [
-                    "Great source of protein for muscle synthesis.",
-                    "Consider swapping the mashed potatoes for cauliflower mash to reduce carbs."
-                ]
-            },
-            {
-                "dish_name": "(Fallback) Avocado Toast & Eggs",
-                "items": [
-                    {"name": "Whole Wheat Bread (2 slices)", "calories": 160, "protein": 8, "carbs": 28, "fats": 2},
-                    {"name": "Mashed Avocado (100g)", "calories": 160, "protein": 2, "carbs": 9, "fats": 15},
-                    {"name": "Poached Eggs (2 large)", "calories": 144, "protein": 12, "carbs": 1, "fats": 10}
-                ],
-                "total": {"calories": 464, "protein": 22, "carbs": 38, "fats": 27},
-                "alignment_status": "Not Ideal",
-                "tips": [
-                    "High in healthy fats, but be mindful of total calorie density.",
-                    f"To better align with your {goal} goal, use egg whites instead of whole eggs to drop fats."
-                ]
-            }
-        ]
-        return random.choice(fallbacks)
+        print(f"[AI] Image analysis error: {e}")
+        return {
+            "dish_name": "Analysis Failed",
+            "image_description": "The AI service could not process this image. Please try again.",
+            "confidence": 0.0,
+            "items": [],
+            "total": {"calories": 0, "protein": 0, "carbs": 0, "fats": 0},
+            "alignment_status": "Unclear",
+            "tips": [
+                "The image could not be analyzed. Please check your internet connection and API key.",
+                "Try uploading a clearer, well-lit photo of your food."
+            ]
+        }
 
 
 def calculate_bmi(weight, height):
