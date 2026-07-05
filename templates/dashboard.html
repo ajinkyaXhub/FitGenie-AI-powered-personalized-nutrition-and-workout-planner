@@ -267,9 +267,9 @@
                     }
                     
                     // Unclear warning banner
-                    const unclearWarning = document.getElementById('meal-unclear-warning');
                     const status = (data.alignment_status || "").toLowerCase();
-                    if (status.includes("unclear") || (data.confidence !== undefined && data.confidence < 0.6)) {
+                    const unclearWarning = document.getElementById('meal-unclear-warning');
+                    if (status.includes("unclear") && (data.confidence === undefined || data.confidence < 0.35)) {
                         unclearWarning.style.display = 'block';
                     } else {
                         unclearWarning.style.display = 'none';

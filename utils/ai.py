@@ -30,40 +30,32 @@ def analyze_meal_image(image_bytes, goal):
     mime_type = detect_mime_type(image_bytes)
     print(f"[AI] Detected MIME type: {mime_type}")
 
-    prompt = f"""You are a precise computer-vision food analysis system. Your ONLY job is to analyze the uploaded photograph and report EXACTLY what is visible. Hallucination is a critical failure.
+    prompt = f"""You are a precise computer-vision food analysis system. Your job is to analyze the uploaded photograph and report exactly what is visible. Be accurate and honest.
 
-ABSOLUTE RULES — violation causes incorrect analysis:
-1. ONLY identify food items that are CLEARLY and UNAMBIGUOUSLY visible in the photograph. Do NOT guess, assume, or infer hidden ingredients.
-2. If you see a single piece of fruit (watermelon, apple, banana, orange, grapes, berries, etc.), report it as that fruit with an estimated weight. Do NOT wrap it in a fake meal description like "fruit salad" or "chicken toast."
-3. If you are uncertain about ANY item, do NOT include it. Instead, lower the overall confidence score.
-4. NEVER invent generic items like "chicken breast", "toast", "white rice", "salad", or "eggs" unless they are literally, clearly visible in the photo.
-5. If the image is not food, blurry, too dark, or shows a non-food object, you MUST set alignment_status to "Unclear" and describe what you actually see in image_description.
-6. Each item MUST include a confidence_score between 0.0 and 1.0 based on your visual certainty.
+CORE RULES:
+1. Only identify food items that are clearly visible in the photograph. Do not guess hidden ingredients.
+2. Report the food as it appears — if it's a burger, say "Burger"; if it's a fruit, say the fruit name. Do not wrap simple items in fake elaborate descriptions.
+3. If the image is blurry, too dark, or not food at all, set alignment_status to "Unclear" and describe what you see.
+4. Each item should include a confidence_score (0.0 to 1.0) based on your visual certainty. A clear, well-lit photo of a common food should score 0.85–0.98.
 
-VISUAL ANALYSIS WORKFLOW:
-Step 1 — Describe the image in one sentence: what is literally visible?
-Step 2 — List each distinct food item with estimated weight and confidence_score.
-Step 3 — If any item has confidence_score < 0.7, reconsider if it should be included.
-Step 4 — If total confidence < 0.6, set alignment_status to "Unclear".
-
-JSON OUTPUT SCHEMA (return ONLY this JSON, no markdown, no backticks, no extra text):
+JSON OUTPUT (return ONLY this JSON, no markdown, no backticks, no extra text):
 {{
-    "dish_name": "EXACTLY what is visible, e.g., 'Sliced Watermelon' or 'Grilled Chicken Salad'",
+    "dish_name": "What the dish is, e.g., 'Cheeseburger' or 'Sliced Watermelon'",
     "image_description": "One sentence describing what is literally in the photo",
     "confidence": 0.95,
     "items": [
-        {{"name": "Item name with estimated weight (e.g., Watermelon, sliced (300g))", "calories": 90, "protein": 2, "carbs": 22, "fats": 0, "confidence_score": 0.98}}
+        {{"name": "Item with estimated weight (e.g., Beef patty (150g))", "calories": 300, "protein": 20, "carbs": 0, "fats": 25, "confidence_score": 0.95}}
     ],
-    "total": {{"calories": 90, "protein": 2, "carbs": 22, "fats": 0}},
+    "total": {{"calories": 300, "protein": 20, "carbs": 0, "fats": 25}},
     "alignment_status": "Good",
     "tips": ["Tip 1...", "Tip 2..."]
 }}
 
-ALIGNMENT_STATUS RULES:
-- "Good" = clearly aligns with the user's goal AND confidence >= 0.8
-- "Moderate" = partially aligns with goal OR confidence 0.6-0.8
-- "Not Ideal" = works against the goal
-- "Unclear" = confidence < 0.6, not food, blurry, or cannot identify items
+ALIGNMENT_STATUS:
+- "Good" = aligns with goal
+- "Moderate" = partially aligns
+- "Not Ideal" = works against goal
+- "Unclear" = only if the image is not food, blurry, or unrecognizable
 
 USER FITNESS GOAL: "{goal}"
 """
@@ -83,19 +75,20 @@ USER FITNESS GOAL: "{goal}"
         raw = response.text.replace('```json', '').replace('```', '').strip()
         data = json.loads(raw)
 
-        # Validate: if confidence is too low or dish looks like a generic hallucination, flag it
+        # Validate: only flag extremely suspicious results (very low confidence + generic hallucination words)
         confidence = data.get("confidence", 1.0)
         dish_name = data.get("dish_name", "")
         image_desc = data.get("image_description", "")
 
-        # Check for common hallucination patterns
-        generic_hallucinations = ["chicken breast", "grilled chicken", "white rice", "toast", "steak", "salad"]
-        if confidence < 0.5 or any(h in dish_name.lower() for h in generic_hallucinations) and confidence < 0.7:
-            print(f"[AI] WARNING: Low confidence or possible hallucination detected (confidence={confidence}, dish={dish_name}). Flagging as unclear.")
-            data["alignment_status"] = "Unclear - Low confidence or possible hallucination"
+        # Only flag if confidence is extremely low (< 0.3) AND dish name contains a known hallucination pattern
+        generic_hallucinations = ["chicken breast", "grilled chicken", "white rice", "toast", "steak"]
+        has_hallucination = any(h in dish_name.lower() for h in generic_hallucinations)
+        if confidence < 0.3 and has_hallucination:
+            print(f"[AI] WARNING: Very low confidence ({confidence}) with generic dish name '{dish_name}'. Flagging as unclear.")
+            data["alignment_status"] = "Unclear - Low confidence detection"
             data["tips"] = [
                 "The AI could not confidently identify the food in this photo.",
-                "Please retake the photo with better lighting, closer framing, and ensure the food is clearly visible."
+                "Please retake the photo with better lighting and closer framing."
             ]
 
         print(f"[AI] Analysis result: dish='{dish_name}', confidence={confidence}, status={data.get('alignment_status')}")
