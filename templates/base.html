@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FitGenie — Your AI Fitness Companion</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="{% if current_user.is_authenticated %}has-sidebar{% endif %}">
+
+<div id="loading-overlay" class="loading-overlay" style="display:none;">
+    <div class="spinner"></div>
+    <p>Generating your personalized plan&hellip;</p>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-container">
+      {% for category, message in messages %}
+        <div class="flash-message flash-{{ category }}">
+          <div class="flash-icon">
+            {% if category == 'success' %}<i class="fas fa-circle-check" style="color:var(--success)"></i>
+            {% elif category == 'danger' %}<i class="fas fa-circle-xmark" style="color:var(--error)"></i>
+            {% elif category == 'warning' %}<i class="fas fa-triangle-exclamation" style="color:var(--warning)"></i>
+            {% else %}<i class="fas fa-circle-info" style="color:var(--secondary)"></i>{% endif %}
+          </div>
+          <p class="flash-text">{{ message }}</p>
+          <button class="flash-close" onclick="this.parentElement.style.animation='fadeOut 0.3s forwards'; setTimeout(()=>this.parentElement.remove(), 300)">×</button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+{% if current_user.is_authenticated %}
+
+<button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle menu">
+    <i class="fas fa-bars"></i>
+</button>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+<div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand-row">
+            <a href="{{ url_for('meal.dashboard') }}" class="sidebar-brand">
+                <i class="fas fa-wand-magic-sparkles"></i>
+                <span>FitGenie</span>
+            </a>
+            <button id="sidebar-close" class="sidebar-close-btn" aria-label="Close menu">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('meal.dashboard') }}" class="{% if request.endpoint == 'meal.dashboard' %}active{% endif %}">
+                <i class="fas fa-house"></i> <span>Dashboard</span>
+            </a>
+            <a href="{{ url_for('meal.profile') }}" class="{% if request.endpoint == 'meal.profile' %}active{% endif %}">
+                <i class="fas fa-user"></i> <span>Profile</span>
+            </a>
+            <a href="{{ url_for('meal.settings') }}" class="{% if request.endpoint == 'meal.settings' %}active{% endif %}">
+                <i class="fas fa-gear"></i> <span>Settings</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="sidebar-user">
+                <div class="sidebar-avatar">{{ current_user.username[0]|upper }}</div>
+                <div class="sidebar-user-meta">
+                    <span class="sidebar-user-name">{{ current_user.username }}</span>
+                    <span class="sidebar-user-email">{{ current_user.email }}</span>
+                </div>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="sidebar-logout-btn">
+                <i class="fas fa-arrow-right-from-bracket"></i> <span>Logout</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="app-content">
+        <div class="mobile-topbar">
+            <span class="mobile-topbar-spacer"></span>
+            <a href="{{ url_for('meal.dashboard') }}" class="mobile-brand">
+                <i class="fas fa-wand-magic-sparkles"></i> FitGenie
+            </a>
+        </div>
+
+        <main class="container">
+{% else %}
+
+<nav class="site-nav">
+    <a href="{{ url_for('auth.login') }}" class="logo">
+        <i class="fas fa-wand-magic-sparkles"></i>
+        <span>FitGenie</span>
+    </a>
+
+    <div class="links">
+        <a href="{{ url_for('auth.login') }}">
+            <i class="fas fa-right-to-bracket"></i> Login
+        </a>
+        <a href="{{ url_for('auth.register') }}" class="primary-btn" style="padding: 8px 16px; margin-left: 10px;">
+            <i class="fas fa-user-plus"></i> Join Now
+        </a>
+    </div>
+</nav>
+
+<main class="container">
+{% endif %}
+
+{% block content %}{% endblock %}
+
+</main>
+
+{% if current_user.is_authenticated %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+document.querySelectorAll('.flash-message').forEach(msg => {
+  setTimeout(() => {
+    if(msg) {
+      msg.style.animation = 'fadeOut 0.3s forwards';
+      setTimeout(() => msg.remove(), 300);
+    }
+  }, 5000);
+});
+</script>
+
+<style>
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(100%); }
+}
+</style>
+
+<script>
+(function() {
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const closeBtn = document.getElementById('sidebar-close');
+    const overlay = document.getElementById('sidebar-overlay');
+    const sidebar = document.getElementById('sidebar');
+    const appContent = document.querySelector('.app-content');
+    if (!toggleBtn || !sidebar) return;
+
+    const STORAGE_KEY = 'fitgenie_sidebar_open';
+    const isDesktop = () => window.innerWidth > 992;
+
+    function setSidebar(open) {
+        sidebar.classList.toggle('sidebar-open', open);
+        if (appContent) appContent.classList.toggle('sidebar-open-content', open);
+        overlay.classList.toggle('visible', open);
+        toggleBtn.style.display = open ? 'none' : 'flex';
+        if (isDesktop()) {
+            try { localStorage.setItem(STORAGE_KEY, open ? '1' : '0'); } catch (e) {}
+        }
+    }
+
+    function getInitialState() {
+        if (!isDesktop()) return false; // start collapsed on mobile/tablet
+        let stored = null;
+        try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+        return stored === null ? true : stored === '1'; // default open on desktop
+    }
+
+    setSidebar(getInitialState());
+
+    toggleBtn.addEventListener('click', () => setSidebar(true));
+    if (closeBtn) closeBtn.addEventListener('click', () => setSidebar(false));
+    overlay.addEventListener('click', () => setSidebar(false));
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') setSidebar(false);
+    });
+
+    sidebar.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+            if (!isDesktop()) setSidebar(false);
+        });
+    });
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => setSidebar(getInitialState()), 150);
+    });
+})();
+</script>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
