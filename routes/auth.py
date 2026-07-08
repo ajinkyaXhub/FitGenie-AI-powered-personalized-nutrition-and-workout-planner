@@ -3,6 +3,8 @@ import traceback
 from flask_login import login_user, logout_user, login_required, current_user
 from extensions import db
 from models.user import User
+from utils.tokens import generate_reset_token, verify_reset_token
+from utils.mailer import send_reset_email
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -80,4 +82,61 @@ def register():
 def logout():
     logout_user()
     flash("You have been successfully logged out.", "info")
-    return redirect(url_for("auth.login"))
+    return redirect(url_for("auth.login"))
+
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for("meal.dashboard"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        user = User.query.filter_by(email=email).first()
+
+        # Always show the same message whether or not the email exists,
+        # so this form can't be used to check which emails are registered.
+        if user:
+            token = generate_reset_token(user.email)
+            reset_url = url_for("auth.reset_password", token=token, _external=True)
+            send_reset_email(user.email, reset_url)
+
+        flash("If that email is registered, a reset link has been sent.", "success")
+        return redirect(url_for("auth.login"))
+
+    return render_template("forgot_password.html")
+
+
+@auth_bp.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect(url_for("meal.dashboard"))
+
+    email = verify_reset_token(token)
+    if not email:
+        flash("That reset link is invalid or has expired. Please request a new one.", "danger")
+        return redirect(url_for("auth.forgot_password"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if len(password) < 6:
+            flash("Password must be at least 6 characters long.", "danger")
+            return redirect(url_for("auth.reset_password", token=token))
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return redirect(url_for("auth.reset_password", token=token))
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            flash("Account not found.", "danger")
+            return redirect(url_for("auth.forgot_password"))
+
+        user.set_password(password)
+        db.session.commit()
+        flash("Your password has been reset. You can now log in.", "success")
+        return redirect(url_for("auth.login"))
+
+    return render_template("reset_password.html", token=token)
