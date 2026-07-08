@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="dashboard-container">
+
+    <div class="dashboard-header">
+        <h1 class="gradient-text"><i class="fas fa-gear"></i> Settings</h1>
+        <p>Manage your account details and security.</p>
+    </div>
+
+    <!-- Account Details -->
+    <div class="dashboard-card glass-panel" style="animation: fadeUp 0.8s ease; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.15rem; display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem;">
+            <i class="fas fa-id-badge" style="color:var(--primary-light)"></i> Account Details
+        </h2>
+
+        <form method="POST" action="{{ url_for('meal.settings') }}">
+            <input type="hidden" name="form_type" value="account">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label><i class="fas fa-user"></i> Username</label>
+                    <input type="text" name="username" value="{{ current_user.username }}" required>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-envelope"></i> Email</label>
+                    <input type="email" name="email" value="{{ current_user.email }}" required>
+                </div>
+            </div>
+            <div style="padding-top: 0.5rem;">
+                <button class="primary-btn" type="submit" style="width: auto; min-width: 200px;">
+                    <i class="fas fa-floppy-disk"></i> Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Change Password -->
+    <div class="dashboard-card glass-panel" style="animation: fadeUp 0.8s ease; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.15rem; display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem;">
+            <i class="fas fa-lock" style="color:var(--primary-light)"></i> Change Password
+        </h2>
+
+        <form method="POST" action="{{ url_for('meal.settings') }}">
+            <input type="hidden" name="form_type" value="password">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label><i class="fas fa-key"></i> Current Password</label>
+                    <input type="password" name="current_password" placeholder="Current password" required>
+                </div>
+                <div class="form-group"></div>
+                <div class="form-group">
+                    <label><i class="fas fa-lock"></i> New Password</label>
+                    <input type="password" name="new_password" placeholder="At least 6 characters" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-check-double"></i> Confirm New Password</label>
+                    <input type="password" name="confirm_password" placeholder="Repeat new password" required minlength="6">
+                </div>
+            </div>
+            <div style="padding-top: 0.5rem;">
+                <button class="primary-btn" type="submit" style="width: auto; min-width: 200px;">
+                    <i class="fas fa-shield-halved"></i> Update Password
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="dashboard-card glass-panel" style="animation: fadeUp 0.8s ease; border-color: rgba(239, 68, 68, 0.25);">
+        <h2 style="font-size: 1.15rem; display: flex; align-items: center; gap: 10px; margin-bottom: 0.75rem; color: var(--error);">
+            <i class="fas fa-triangle-exclamation"></i> Danger Zone
+        </h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.25rem;">
+            This clears your saved age, height, weight, goal, diet, activity, and cuisine so you can rebuild your fitness profile from scratch. Your account and login stay intact.
+        </p>
+        <form method="POST" action="{{ url_for('meal.settings') }}" onsubmit="return confirm('Reset your fitness profile data? This cannot be undone.');">
+            <input type="hidden" name="form_type" value="reset_fitness_profile">
+            <button type="submit" class="secondary-btn" style="border-color: rgba(239, 68, 68, 0.3); color: var(--error);">
+                <i class="fas fa-rotate-left"></i> Reset Fitness Profile
+            </button>
+        </form>
+    </div>
+
+</div>
+
+{% endblock %}
