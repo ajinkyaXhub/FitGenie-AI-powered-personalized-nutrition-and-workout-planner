@@ -162,7 +162,7 @@ def analyze_meal():
         image_bytes = file.read()
         print(f"[API] Received file: {file.filename}, size: {len(image_bytes)} bytes, mimetype: {file.mimetype}")
         from utils.ai import analyze_meal_image
-        goal = current_user.goal or "Maintain Fitness"
+        goal = current_user.goal or "maintain"
         
         result = analyze_meal_image(image_bytes, goal)
         print(f"[API] Analysis result: {result.get('dish_name', 'N/A')}, confidence: {result.get('confidence', 'N/A')}, status: {result.get('alignment_status', 'N/A')}")
