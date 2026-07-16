@@ -35,11 +35,59 @@ def analyze_meal_image(image_bytes, goal):
     mime_type = detect_mime_type(image_bytes)
     print(f"[AI] Detected MIME type: {mime_type}")
 
+    goal_map = {
+        "lose":     "fat loss (caloric deficit)",
+        "gain":     "muscle gain (caloric surplus)",
+        "maintain": "weight maintenance (balanced nutrition)",
+    }
+    goal_desc = goal_map.get(str(goal).lower(), str(goal))
+
+    goal_criteria = {
+        "lose": (
+            "The user's goal is FAT LOSS. Judge this meal against that goal specifically:\n"
+            "- \"Good\": lower-calorie, high-protein and/or high-fibre, minimal added sugar/fried food, "
+            "portion size reasonable for a calorie deficit.\n"
+            "- \"Moderate\": reasonably healthy but noticeably calorie-dense, oversized portion, or "
+            "moderate amounts of refined carbs/sugar/oil.\n"
+            "- \"Not Ideal\": high-calorie, fried, high in added sugar or refined carbs, large portion, "
+            "or low in protein/fibre relative to its calories — this actively works against a deficit."
+        ),
+        "gain": (
+            "The user's goal is MUSCLE GAIN (caloric surplus). Judge this meal against that goal specifically:\n"
+            "- \"Good\": calorie- and protein-dense, supports a surplus and muscle repair.\n"
+            "- \"Moderate\": adequate but light on calories or protein for a bulking phase.\n"
+            "- \"Not Ideal\": too small a portion or too low in calories/protein to meaningfully support a "
+            "surplus — even if it's \"healthy\", an under-sized meal is not ideal for THIS goal."
+        ),
+        "maintain": (
+            "The user's goal is WEIGHT MAINTENANCE (balanced nutrition). Judge this meal against that goal specifically:\n"
+            "- \"Good\": balanced macros, reasonable portion, not excessive in any one macro.\n"
+            "- \"Moderate\": leans heavy in one direction (e.g. very high fat or very high carb) but not extreme.\n"
+            "- \"Not Ideal\": highly processed, very high in added sugar/fried fat, or a portion clearly "
+            "too large or too small for a balanced diet."
+        ),
+    }
+    criteria_text = goal_criteria.get(
+        str(goal).lower(),
+        "Judge this meal's general nutritional quality — balance of protein, fat, carbs, and portion size."
+    )
+
     prompt = f"""Look at the uploaded food photo and analyze it carefully.
 
 Describe what you see. Identify the food items, estimate their portion sizes, and calculate approximate calories and macros.
 
 IMPORTANT: Only describe what you can actually see in the photo. Do not guess about hidden ingredients.
+
+User's fitness goal: {goal_desc}
+
+How to judge "alignment_status" (this is the most important part — do not default to "Good"):
+{criteria_text}
+
+You MUST actually evaluate this specific meal's estimated calories/protein/fat/carbs against the criteria
+above and pick whichever of "Good", "Moderate", or "Not Ideal" genuinely fits — do not assume a meal is
+"Good" just because it looks like real food. A large fried or sugary meal should score "Not Ideal" for a
+fat-loss goal even though the photo is a clear, well-lit photo of actual food. Only use "Unclear" when the
+image itself is not food or is unrecognizable — never as a stand-in for "Not Ideal".
 
 Respond in this exact format (JSON wrapped in ```json ... ``` code blocks):
 
@@ -64,17 +112,16 @@ Respond in this exact format (JSON wrapped in ```json ... ``` code blocks):
         "carbs": 0,
         "fats": 25
     }},
-    "alignment_status": "Good",
-    "tips": ["Tip 1", "Tip 2"]
+    "alignment_status": "<one of exactly: Good | Moderate | Not Ideal | Unclear — judged per the criteria above, NOT a default>",
+    "tips": ["Tip 1 explaining WHY this meal was scored that way for this specific goal", "Tip 2 with a concrete improvement suggestion"]
 }}
 ```
-
-User fitness goal: {goal}
 
 Rules:
 - Be honest about what you see. If it's a pizza, say "Pizza".
 - If the image is not food or unrecognizable, use "alignment_status": "Unclear".
 - Otherwise, confidence should be 0.85-0.98 for clear photos.
+- Tips must reference the actual goal ({goal_desc}) and the actual meal, not generic advice.
 """
 
     try:
